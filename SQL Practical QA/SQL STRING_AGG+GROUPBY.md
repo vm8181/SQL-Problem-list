@@ -138,7 +138,7 @@ GROUP BY
 
 ---
 
-how to use `STRING_AGG` alongside other aggregate functions (e.g., `SUM`, `COUNT`, `AVG`, `MAX`) with `GROUP BY` and `ORDER BY` — and how to compute **top page flows** (session path analysis) such as:
+### How to use `STRING_AGG` alongside other aggregate functions (e.g., `SUM`, `COUNT`, `AVG`, `MAX`) with `GROUP BY` and `ORDER BY` — and how to compute **top page flows** (session path analysis) such as:
 
 ```
 P1-P2-P3-P2 - 200
