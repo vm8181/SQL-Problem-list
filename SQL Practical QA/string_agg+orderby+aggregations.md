@@ -29,15 +29,15 @@ ORDER BY
 ```
 This query groups employees by Department, counts the number of employees, sums their salaries, and lists their names (ordered alphabetically within each department), all while ordering the final result by TotalSalary in descending order.
 #### Explanation of Clauses:
-```SELECT```:
+- ```SELECT```:
 Specifies the columns to be retrieved, including the results of aggregate functions.
-```FROM```:
+- ```FROM```:
 Indicates the table(s) from which to retrieve data.
-```GROUP BY```:
+- ```GROUP BY```:
 Groups rows that have the same values in specified columns into a summary row, enabling aggregate functions to be applied to each group.
-```WITHIN GROUP (ORDER BY ...)```:
+- ```WITHIN GROUP (ORDER BY ...)```:
 Used specifically with STRING_AGG to define the order of concatenation within each group.
-```ORDER BY```:
-
+- ```ORDER BY```:
 Sorts the final result set based on one or more columns in ascending (ASC) or descending (DESC) order. This applies to the entire result set after all aggregations and groupings
+
 
