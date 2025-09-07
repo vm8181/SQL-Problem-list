@@ -138,6 +138,175 @@ GROUP BY
 
 ---
 
+how to use `STRING_AGG` alongside other aggregate functions (e.g., `SUM`, `COUNT`, `AVG`, `MAX`) with `GROUP BY` and `ORDER BY` — and how to compute **top page flows** (session path analysis) such as:
+
+```
+P1-P2-P3-P2 - 200
+P2-P3-P6-P2-P7 - 180
+```
+
+---
+
+## Schema (example)
+
+Table: `PageVisits`
+- `user_id`
+- `session_id`
+- `visit_time` (timestamp)
+- `page_id` (e.g., 'P1', 'P2', ...)
+
+---
+
+## A. Full-session flows (one row per session)
+
+### 1) Basic approach (concatenate pages in visit order)
+**Postgres-style**
+```sql
+WITH OrderedPages AS (
+    SELECT
+        session_id,
+        string_agg(page_id, '-' ORDER BY visit_time) AS page_flow
+    FROM PageVisits
+    GROUP BY session_id
+)
+SELECT
+    page_flow,
+    COUNT(*) AS flow_count
+FROM OrderedPages
+GROUP BY page_flow
+ORDER BY flow_count DESC
+LIMIT 3;
+```
+
+**SQL Server / Standard SQL (WITHIN GROUP)**
+```sql
+WITH OrderedPages AS (
+    SELECT
+        session_id,
+        STRING_AGG(page_id, '-') WITHIN GROUP (ORDER BY visit_time) AS page_flow
+    FROM PageVisits
+    GROUP BY session_id
+)
+SELECT
+    page_flow,
+    COUNT(*) AS flow_count
+FROM OrderedPages
+GROUP BY page_flow
+ORDER BY flow_count DESC
+FETCH FIRST 3 ROWS ONLY;
+```
+
+**Sample output**
+```
+P1-P2-P3-P2 - 200
+P2-P3-P6-P2-P7 - 180
+P3-P4-P5     - 120
+```
+
+---
+
+### 2) Remove consecutive duplicate page hits (optional but often useful)
+If the same `page_id` is recorded multiple times in a row (e.g., refresh), remove consecutive duplicates before concatenation:
+
+```sql
+WITH Ordered AS (
+  SELECT
+    session_id,
+    page_id,
+    visit_time,
+    LAG(page_id) OVER (PARTITION BY session_id ORDER BY visit_time) AS prev_page
+  FROM PageVisits
+),
+Filtered AS (
+  SELECT
+    session_id,
+    page_id,
+    visit_time
+  FROM Ordered
+  WHERE prev_page IS NULL OR page_id <> prev_page
+)
+,Flows AS (
+  SELECT
+    session_id,
+    string_agg(page_id, '-' ORDER BY visit_time) AS page_flow
+  FROM Filtered
+  GROUP BY session_id
+)
+SELECT page_flow, COUNT(*) AS flow_count
+FROM Flows
+GROUP BY page_flow
+ORDER BY flow_count DESC
+LIMIT 3;
+```
+
+---
+
+## B. n-step (sliding window) sub-flows — e.g., top 3-page sequences
+
+Sometimes you want the top **n-grams** within sessions (e.g., P1→P2→P3, P2→P3→P6). Use `LEAD()`:
+
+```sql
+WITH Seq AS (
+  SELECT
+    session_id,
+    page_id,
+    visit_time,
+    LEAD(page_id, 1) OVER (PARTITION BY session_id ORDER BY visit_time) AS p1,
+    LEAD(page_id, 2) OVER (PARTITION BY session_id ORDER BY visit_time) AS p2
+  FROM PageVisits
+)
+SELECT
+  CONCAT(page_id, '-', p1, '-', p2) AS flow3,
+  COUNT(*) AS flow_count
+FROM Seq
+WHERE p1 IS NOT NULL AND p2 IS NOT NULL
+GROUP BY flow3
+ORDER BY flow_count DESC
+LIMIT 3;
+```
+
+**Sample output**
+```
+P1-P2-P3 - 600
+P2-P3-P6 - 420
+P3-P6-P2 - 310
+```
+
+**Notes**
+- To get 4-step sub-flows, add more `LEAD()` columns.
+- Consider deduping consecutive duplicates (see section A.2) before generating n-grams.
+
+---
+
+## C. Additional considerations & performance tips
+
+- **Sessionization**: Ensure `session_id` is already calculated (or compute it using timeouts) so page hits from different visits aren't combined.
+- **Ordering**: Always use an event timestamp (`visit_time`) to order pages; ties may need tie-breakers (e.g., an `event_id`).
+- **Normalization**: Remove consecutive duplicates if you don’t want refreshes or repeated hits to skew flows.
+- **Flow length**: Full session flows may be long; consider capping maximum length or using n-grams for analysis.
+- **Storage & indexing**: Large datasets benefit from indexes on `(session_id, visit_time)` and partitioning by date.
+- **Approximate counting**: For huge traffic volumes, consider approximate counting (HyperLogLog) or sampling before aggregation.
+- **Presentation**: If you want to store flows as arrays (Postgres `array_agg`) instead of strings, it can be easier to post-process.
+
+---
+
+## Quick recipes
+
+- **Top 3 full session page flows** — use `STRING_AGG` per `session_id`, then `GROUP BY` the flow and `ORDER BY COUNT DESC`.
+- **Top 3 3-page sequences (n-grams)** — use `LEAD()` with `PARTITION BY session_id` and count occurrences.
+- **Remove refresh/duplicate noise** — use `LAG()` to filter out consecutive duplicates before aggregating.
+
+---
+
+## Example: Final output format
+When you run the "top full-session flows" query you can print results as:
+
+```
+P1-P2-P3-P2 - 200
+P2-P3-P6-P2-P7 - 180
+P3-P4-P5     - 120
+```
+
 ## Explanation of Clauses
 
 - **`SELECT`** → Columns and aggregate outputs to retrieve  
@@ -156,7 +325,3 @@ GROUP BY
 - Use `WITHIN GROUP (ORDER BY ...)` to ensure meaningful ordering of concatenated strings.  
 
 ---
-
-## License
-
-This content is provided as-is for learning, interview prep, and practice.  
