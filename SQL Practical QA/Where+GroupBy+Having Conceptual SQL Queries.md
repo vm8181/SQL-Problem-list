@@ -208,8 +208,3 @@ HAVING
 - Row filters that reference non-aggregated columns → `WHERE`.
 - Grouping and aggregating → `GROUP BY`.
 - Filters that reference aggregates → `HAVING`.
-
----
-
-## License
-This content is provided as-is for study, interview prep, and learning. Feel free to reuse and adapt.  
